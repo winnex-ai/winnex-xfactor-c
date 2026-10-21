@@ -68,11 +68,20 @@ skip = "*-musllinux_*"
 # Cada wheel é testado antes de publicar. O pacote importa sem GPU (OpenCL só
 # é exigido quando HilbertAttention é construído), então o import valida a ABI
 # e os símbolos exportados sem precisar de driver.
-test-command = "python -c \"import winnex_xfactor_c; print('ok')\""
-test-requires = ["numpy"]
+#
+# SEM test-requires numpy. O manylinux2014 (imagem padrão do cibuildwheel) tem
+# GCC antigo demais para compilar as rodas do numpy — medido no CI run #2:
+#     ERROR: Problem encountered: NumPy requires GCC >= 10.3
+# E o import não precisa de numpy: o binding resolve os arrays via
+# pybind11/numpy.h, que é header-only e compilado junto.
+# O teste abaixo valida a ABI (import do módulo compilado) sem dependências.
+test-command = "python -c \"import _winnex_xfactor_c; print('abi ok')\""
 build-verbosity = 1
 
 [tool.cibuildwheel.linux]
+# manylinux2014 é a imagem padrão. manylinux_2_28 tem GCC >= 12 e evita a
+# classe de problema acima se algum dia um test-requires voltar a existir.
+manylinux-x86_64-image = "manylinux_2_28"
 
 [tool.cibuildwheel.macos]
 # macos-14 é arm64 (mesma escolha do nano: x86_64 dobraria o tempo).
