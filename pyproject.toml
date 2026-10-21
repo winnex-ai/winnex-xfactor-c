@@ -1,5 +1,10 @@
 [build-system]
-requires = ["scikit-build-core>=0.10", "pybind11>=2.12", "cmake>=3.20", "auditwheel>=5.0", "numpy>=1.20"]
+# scikit-build-core[pyproject] >= 1.0 — exatamente como winnex-nano, que builda
+# nas três plataformas. A versão 0.10 SEM o extra [pyproject] não instala o
+# resolvedor de CMake dentro da imagem manylinux (que não traz cmake próprio):
+#     scikit_build_core.errors.CMakeNotFoundError: Could not find CMake >=3.20
+# medido no CI run #3. O extra + a versão 1.x são o que o nano usa em produção.
+requires = ["scikit-build-core[pyproject]>=1.0", "pybind11>=2.12", "cmake>=3.20", "auditwheel>=5.0", "numpy>=1.20"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -36,7 +41,7 @@ Homepage = "https://winnex.ai"
 Source = "https://github.com/winnex-ai"
 
 [tool.scikit-build]
-minimum-version = "0.10"
+minimum-version = "1.0"
 build-dir = "build/{wheel_tag}"
 cmake.version = ">=3.20"
 # versão derivada da tag git (mesmo padrão do nano/xfactor)
