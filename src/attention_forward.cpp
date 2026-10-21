@@ -4,10 +4,40 @@
 // Vendored OpenCL headers (types + constants only; no link-time loader).
 #include <CL/cl.h>
 
+// PORTABLE DYNAMIC LOADING (2026-10-21). dlopen/dlsym/dlclose are POSIX and do
+// not exist on Windows, which uses LoadLibrary/GetProcAddress/FreeLibrary.
+// Without this layer the MSVC build fails with:
+//     attention_forward.cpp(7,10): error C1083: Cannot open include file:
+//     'dlfcn.h': No such file or directory
+// (reproduced in CI: Wheels on windows-latest, run #1). This mirrors the shim
+// already used by winnex-madhava's speed_opencl.cpp, so the whole stack loads
+// OpenCL the same way on every platform.
+#ifdef _WIN32
+// NOMINMAX: <windows.h> defines min/max as MACROS, which breaks every
+// std::min/std::max in this translation unit ("error C2589: '(' illegal token
+// on the right side of '::'"). Defining these before the include suppresses it.
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+static void* xfc_open(const char* nome) { return (void*)LoadLibraryA(nome); }
+static void* xfc_sym(void* h, const char* nome) {
+    return (void*)GetProcAddress((HMODULE)h, nome);
+}
+static void xfc_close(void* h) { if (h) FreeLibrary((HMODULE)h); }
+#else
 #include <dlfcn.h>
+static void* xfc_open(const char* nome) { return dlopen(nome, RTLD_NOW | RTLD_LOCAL); }
+static void* xfc_sym(void* h, const char* nome) { return dlsym(h, nome); }
+static void xfc_close(void* h) { if (h) dlclose(h); }
+#endif
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -66,10 +96,10 @@ static bool PosPhaseEnabled() {
 
 static void preload_vendor_drivers() {
     // NVIDIA: libnvidia-opencl.so.1 (the ICD driver).
-    dlopen("libnvidia-opencl.so.1", RTLD_NOW | RTLD_LOCAL);
+    xfc_open("libnvidia-opencl.so.1");
     // Intel / AMD ICD drivers (harmless if absent).
-    dlopen("libintel-opencl.so.1", RTLD_NOW | RTLD_LOCAL);
-    dlopen("libamdocl64.so", RTLD_NOW | RTLD_LOCAL);
+    xfc_open("libintel-opencl.so.1");
+    xfc_open("libamdocl64.so");
 }
 
 // Eager init at MODULE LOAD time (before any heavy CPU/OpenMP work). The
@@ -80,13 +110,13 @@ static void preload_vendor_drivers() {
 // registered before main()/import completes.
 struct EagerPreload {
     EagerPreload() {
-        // dlopen the loader so its symbols are resident.
-        void* h = dlopen("libOpenCL.so.1", RTLD_NOW | RTLD_LOCAL);
-        if (!h) h = dlopen("libOpenCL.so", RTLD_NOW | RTLD_LOCAL);
+        // Load the ICD loader so its symbols are resident.
+        void* h = xfc_open("libOpenCL.so.1");
+        if (!h) h = xfc_open("libOpenCL.so");
         preload_vendor_drivers();
         // Force platform enumeration now (registers the driver's platform).
         typedef cl_int (*GetPlatFn)(cl_uint, cl_platform_id*, cl_uint*);
-        auto fn = (GetPlatFn)(h ? dlsym(h, "clGetPlatformIDs") : nullptr);
+        auto fn = (GetPlatFn)(h ? xfc_sym(h, "clGetPlatformIDs") : nullptr);
         if (fn) { cl_uint n = 0; fn(0, nullptr, &n); }
     }
 };
@@ -94,15 +124,15 @@ static EagerPreload g_eager_preload;
 
 static bool load_opencl() {
     if (g_ocl) return true;
-    void* h = dlopen("libOpenCL.so.1", RTLD_NOW | RTLD_LOCAL);
-    if (!h) h = dlopen("libOpenCL.so", RTLD_NOW | RTLD_LOCAL);
+    void* h = xfc_open("libOpenCL.so.1");
+    if (!h) h = xfc_open("libOpenCL.so");
     if (!h) return false;
     // Ensure the vendor driver is loaded before platform enumeration.
     preload_vendor_drivers();
     auto* api = new OCLApi;
     bool ok = true;
 #define LOAD(name) \
-    *(void**)(&api->name) = dlsym(h, #name); \
+    *(void**)(&api->name) = xfc_sym(h, #name); \
     if (!api->name) ok = false
     LOAD(clGetPlatformIDs);        LOAD(clGetDeviceIDs);        LOAD(clGetDeviceInfo);
     LOAD(clCreateContext);         LOAD(clCreateCommandQueue);
@@ -113,7 +143,7 @@ static bool load_opencl() {
     LOAD(clReleaseKernel);
     LOAD(clReleaseProgram);        LOAD(clReleaseCommandQueue); LOAD(clReleaseContext);
 #undef LOAD
-    if (!ok) { dlclose(h); delete api; return false; }
+    if (!ok) { xfc_close(h); delete api; return false; }
     g_ocl = api;
     return true;
 }

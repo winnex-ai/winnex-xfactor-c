@@ -125,12 +125,29 @@ double preservation_error(const DerivedWeights& dw, const float* W_q,
     // Reconstruct W_q_hat = W_q'·W_z  [rows × d]  and compare to the original.
     //   W_q_hat[o][i] = Σ_z W_q'[o][z] · W_z[z][i]
     // W_z is [4d × d]: element (row=z, col=i) at z*d + i.
-    // Per-row partial sums (num, den) reduced by OpenMP.
+    // Per-row partial sums (num, den) reduced by OpenMP when available.
+    //
+    // PORTABILITY FIX (2026-10-21). This block called omp_get_thread_num()
+    // unconditionally while `#include <omp.h>` is inside `#ifdef _OPENMP`.
+    // Apple clang ships without OpenMP by default, so the macOS wheel build
+    // fails with:
+    //     derive_weights.cpp:133:25: error: use of undeclared identifier
+    //     'omp_get_thread_num'
+    // (reproduced in CI: Wheels on macos-14, run #1).
+    //
+    // The pragmas are ignored by a compiler without OpenMP, so the serial
+    // fallback below is the whole computation in one thread. The result is
+    // identical — OpenMP only splits the row loop.
     const int max_threads = 256;
     std::vector<double> partial_num(max_threads, 0.0), partial_den(max_threads, 0.0);
+#ifdef _OPENMP
 #pragma omp parallel
     {
         const int tid = omp_get_thread_num();
+#else
+    {
+        const int tid = 0;
+#endif
         double n = 0.0, dd = 0.0;
 #pragma omp for schedule(static)
         for (int o = 0; o < rows; ++o) {
