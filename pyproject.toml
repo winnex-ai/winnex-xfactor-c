@@ -1,0 +1,81 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.12", "cmake>=3.20", "auditwheel>=5.0", "numpy>=1.20"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "winnex-xfactor-c"
+# A versão vem da tag git, não de um literal — mesmo padrão de winnex-nano e
+# winnex-xfactor. Um valor hardcoded já divergiu do pacote publicado antes, e
+# essa classe de erro é silenciosa: o build passa e o wheel sobe com a versão
+# errada. A tag é a fonte única.
+dynamic = ["version"]
+description = "Native Ψ attention engine — latent coupling + phase activation, adaptive to pretrained LLMs (no training)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Winnex Brasil Soluções Empresariais LTDA-ME", email = "pay@winnex.ai" },
+]
+keywords = [
+    "attention", "latent-coupling", "phase-activation", "spectral",
+    "quaternion", "manifold", "deterministic", "winnex", "madhava",
+    "adaptive", "llm", "inference", "c++",
+]
+classifiers = [
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "numpy>=1.20",
+]
+
+[project.urls]
+Homepage = "https://winnex.ai"
+Source = "https://github.com/winnex-ai"
+
+[tool.scikit-build]
+minimum-version = "0.10"
+build-dir = "build/{wheel_tag}"
+cmake.version = ">=3.20"
+# versão derivada da tag git (mesmo padrão do nano/xfactor)
+metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
+wheel.packages = ["python/winnex_xfactor_c"]
+sdist.include = [
+    "include/**",
+    "src/**",
+    "bindings/**",
+    "CMakeLists.txt",
+    "pyproject.toml",
+    "README.md",
+    "LICENSE",
+]
+
+[tool.scikit-build.cmake.define]
+WINNEX_XFACTOR_C_BUILD_TESTS = "OFF"
+WINNEX_XFACTOR_C_BUILD_PYTHON = "ON"
+
+[tool.setuptools]
+package-dir = { "" = "python" }
+
+[tool.cibuildwheel]
+# Mesmo padrão de winnex-nano e winnex-xfactor: alvos explícitos cp310–cp313.
+# Sem esta seção o cibuildwheel usa o default dele, e o CI anterior do nano
+# sobrescrevia com CIBW_BUILD, publicando só cp312-manylinux_x86_64.
+build = "cp310-* cp311-* cp312-* cp313-*"
+skip = "*-musllinux_*"
+# Cada wheel é testado antes de publicar. O pacote importa sem GPU (OpenCL só
+# é exigido quando HilbertAttention é construído), então o import valida a ABI
+# e os símbolos exportados sem precisar de driver.
+test-command = "python -c \"import winnex_xfactor_c; print('ok')\""
+test-requires = ["numpy"]
+build-verbosity = 1
+
+[tool.cibuildwheel.linux]
+
+[tool.cibuildwheel.macos]
+# macos-14 é arm64 (mesma escolha do nano: x86_64 dobraria o tempo).
+archs = ["arm64"]
+
+[tool.cibuildwheel.windows]

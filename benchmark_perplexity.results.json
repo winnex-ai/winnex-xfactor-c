@@ -1,0 +1,22 @@
+{
+  "model": "Qwen2.5-0.5B",
+  "tokens": 30,
+  "results": {
+    "baseline": {
+      "ppl": 11675254.61494346,
+      "n_tokens": 29
+    },
+    "psi_alpha_0.0": {
+      "ppl": 26044118.37828104,
+      "n_tokens": 29
+    },
+    "psi_alpha_0.3": {
+      "ppl": 71307216.05159575,
+      "n_tokens": 29
+    },
+    "psi_alpha_0.6": {
+      "ppl": 10609743.689143702,
+      "n_tokens": 29
+    }
+  }
+}

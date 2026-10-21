@@ -1,0 +1,73 @@
+{
+  "model": "Qwen3-4B-DFlash-b16",
+  "layers": {
+    "0": {
+      "derive_ms": 9986.637624911964,
+      "preserve_q": 2.3613105317636566e-08,
+      "act": {
+        "q_max_rel_err": 1.6035315866247402e-06,
+        "q_min_cos": 0.9999999403953552,
+        "r_max_rel_err": 1.5620971680618823e-06,
+        "r_min_cos": 1.0,
+        "h_max_rel_err": 1.5855470110182068e-06,
+        "h_min_cos": 0.9999998807907104
+      },
+      "classical_ms_per_token": 1.8861997500061989,
+      "psi_ms_per_token": 38.014824353158474,
+      "latency_ratio": 20.15418799256735,
+      "weight_memory": {
+        "classical_MB": 62.91456,
+        "derived_MB": 356.51584,
+        "ratio": 5.666666666666667
+      },
+      "phase": {
+        "alpha_0.1": {
+          "score_classical": -0.015723903898065408,
+          "score_psi": -0.014118477754724815,
+          "abs_delta": 0.001605426143340593,
+          "rel_delta": 0.1021009892737907
+        },
+        "alpha_0.5": {
+          "score_classical": -0.015723903898065408,
+          "score_psi": 0.02332421874825461,
+          "abs_delta": 0.039048122646320016,
+          "rel_delta": 2.4833605507243623
+        }
+      },
+      "attention_device": "NVIDIA GeForce RTX 5060 Ti",
+      "latent_cpu_ms_per_token": 35.20669396966696,
+      "attention": {
+        "ctx_64": {
+          "attention_gpu_ms_per_token": 0.45841801911592484,
+          "latent_cpu_ms_per_token": 35.20669396966696,
+          "pipeline_total_ms_per_token": 35.66511198878288,
+          "attention_share_pct": 1.285340192567187
+        },
+        "ctx_256": {
+          "attention_gpu_ms_per_token": 0.4599278171857198,
+          "latent_cpu_ms_per_token": 35.20669396966696,
+          "pipeline_total_ms_per_token": 35.66662178685268,
+          "attention_share_pct": 1.2895188670637063
+        },
+        "ctx_512": {
+          "attention_gpu_ms_per_token": 0.4963020173211892,
+          "latent_cpu_ms_per_token": 35.20669396966696,
+          "pipeline_total_ms_per_token": 35.70299598698815,
+          "attention_share_pct": 1.3900850715779287
+        }
+      }
+    },
+    "1": {
+      "preserve_q": 2.3598534126621687e-08
+    },
+    "2": {
+      "preserve_q": 2.3617251145897736e-08
+    },
+    "3": {
+      "preserve_q": 2.361266655955593e-08
+    },
+    "4": {
+      "preserve_q": 2.360833451224004e-08
+    }
+  }
+}
