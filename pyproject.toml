@@ -1,9 +1,7 @@
 [build-system]
-# scikit-build-core[pyproject] >= 1.0 — exatamente como winnex-nano, que builda
-# nas três plataformas. A versão 0.10 SEM o extra [pyproject] não instala o
-# resolvedor de CMake dentro da imagem manylinux (que não traz cmake próprio):
-#     scikit_build_core.errors.CMakeNotFoundError: Could not find CMake >=3.20
-# medido no CI run #3. O extra + a versão 1.x são o que o nano usa em produção.
+# scikit-build-core[pyproject] >= 1.0 — IDÊNTICO ao winnex-nano, que builda nas
+# três plataformas em produção. Não mexer sem replicar no nano também: o par
+# (build-system, manylinux-x86_64-image, archs) funciona junto ou não funciona.
 requires = ["scikit-build-core[pyproject]>=1.0", "pybind11>=2.12", "cmake>=3.20", "auditwheel>=5.0", "numpy>=1.20"]
 build-backend = "scikit_build_core.build"
 
@@ -87,6 +85,10 @@ build-verbosity = 1
 # manylinux2014 é a imagem padrão. manylinux_2_28 tem GCC >= 12 e evita a
 # classe de problema acima se algum dia um test-requires voltar a existir.
 manylinux-x86_64-image = "manylinux_2_28"
+# Só x86_64. Com aarch64 a matriz vira 4 ABIs × 2 arquiteturas de compilação
+# C++ e estoura o tempo do job (mesma decisão do winnex-nano). Para publicar
+# aarch64, use um runner nativo (ubuntu-24.04-arm) numa matriz separada.
+archs = ["x86_64"]
 
 [tool.cibuildwheel.macos]
 # macos-14 é arm64 (mesma escolha do nano: x86_64 dobraria o tempo).
