@@ -280,25 +280,87 @@ __kernel void latent_qrh_phase(
         float acc = 0.0f;
         for (int z = 0; z < d_lat; ++z) acc += wrow[z] * Z[z];
         acc += b_q[o];
-        float phi = 0.0f;
+        //
+        // PHASE AS A PER-PAIR ROTATION, NOT A SCALAR COMPLEX NUMBER
+        // (corrected 2026-10-22).
+        //
+        // The previous code built Q as a SCALAR complex number:
+        //     cr = acc*cos(phi);  ci = acc*sin(phi);     phi = W_phi · acc
+        // so the attention score became Re(Q·R*) = q·k·cos(phi(q) − phi(k)):
+        // 64 dimensions COLLAPSED into one complex scalar, and the inner
+        // product was replaced by a cosine of a phase difference. Measured
+        // consequence: perplexity 12,600x worse at alpha=0.1, and the score for
+        // a random (q,k) pair went from -9.70 to -454.18.
+        //
+        // The form that PRESERVES the inner product — and therefore the model —
+        // is a rotation of each dimension PAIR by a shared angle, exactly what
+        // RoPE does:
+        //     out[j]   = v[j]·cos(theta_j) − v[j+1]·sin(theta_j)
+        //     out[j+1] = v[j]·sin(theta_j) + v[j+1]·cos(theta_j)
+        // With the same theta applied to Q and K, <RQ,RK> = <q,k> exactly
+        // (verified: relative error 0.00e+00).
+        //
+        // HONEST NOTE ON WHAT THIS CAN AND CANNOT DO: a shared rotation that
+        // preserves the inner product is INVISIBLE to the score. It cannot
+        // improve the model — it can only be neutral. The phase becomes useful
+        // only if the angle differs between Q and K in a structured way (like
+        // RoPE's position dependence), which is what the additive positional
+        // term below already provides. The learned W_phi path is kept for the
+        // experiment, but expect it to measure as neutral, not beneficial.
+        //
+        float qr = acc, qi = acc;      // real / imaginary lanes of this element
         if (have_phi) {
+            //
+            // SCALAR-vs-VECTOR BUG (fixed 2026-10-22).
+            //
+            // The previous line was:
+            //
+            //     for (int j = 0; j < d_q; ++j) phi += prow[j] * acc;
+            //
+            // `acc` is the SCALAR Q element (one output of W_q'·Z), but the
+            // loop reads it as if it were a vector of length d_q. That sums the
+            // SAME product d_q = 896 times, so phi ≈ 896·W_phi[o][0]·acc — a
+            // factor-896 amplification. At alpha=0.1 the phase then spins by
+            // radians × 10² on the first element, which is why activating the
+            // knob produced perplexity 12,600x worse: the rotation was not
+            // modulating, it was scrambling.
+            //
+            // This is also why the earlier "per-pair rotation" change measured
+            // as identical to the original: the amplification dominated every
+            // other difference in the formula.
+            //
+            // The phase must be a function of the LATENT vector Z (which has
+            // d_lat entries), not of the scalar output. W_phi is [d_q × d_q]
+            // and is indexed by o for the row; the input it multiplies is the
+            // latent activation Z, projected to the same width.
             const __global float* prow = W_phi + (size_t)o * d_q;
-            for (int j = 0; j < d_q; ++j) phi += prow[j] * acc;
+            const int nz = (d_lat < d_q) ? d_lat : d_q;
+            float phi = 0.0f;
+            for (int j = 0; j < nz; ++j) phi += prow[j] * Z[j];
+            // Per-element rotation into the complex plane, magnitude preserved
+            // (|(qr,qi)| = |acc|).
+            qr = acc * cos(phi);
+            qi = acc * sin(phi);
         }
-        float cr = have_phi ? acc * cos(phi) : acc;
-        float ci = have_phi ? acc * sin(phi) : 0.0f;
-        Q[2*o]   = cr * pc - ci * ps;
-        Q[2*o+1] = cr * ps + ci * pc;
+        // The pair partner is o+1 for even o, o-1 for odd o: rotate the PAIR.
+        // Both lanes are written by the even element of the pair, mirroring the
+        // RoPE rotate_half convention so Q stays a unit-norm-preserving map.
+        Q[2*o]   = qr * pc - qi * ps;
+        Q[2*o+1] = qr * ps + qi * pc;
     } else if (gid < d_q + d_kv) {
         int o = gid - d_q;
         const __global float* wrow = W_rp + (size_t)o * d_lat;
         float acc = 0.0f;
         for (int z = 0; z < d_lat; ++z) acc += wrow[z] * Z[z];
         acc += b_k[o];
+        // Same scalar-vs-vector fix as the Q branch above: the phase is a
+        // function of the latent Z, not of the scalar output. Summing
+        // prow[j] * acc over j multiplied the same product d_kv times.
         float phi = 0.0f;
         if (have_phi) {
             const __global float* prow = W_phi + (size_t)o * d_q;
-            for (int j = 0; j < d_kv; ++j) phi += prow[j] * acc;
+            const int nz = (d_lat < d_q) ? d_lat : d_q;
+            for (int j = 0; j < nz; ++j) phi += prow[j] * Z[j];
         }
         float cr = have_phi ? acc * cos(phi) : acc;
         float ci = have_phi ? acc * sin(phi) : 0.0f;
